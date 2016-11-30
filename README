@@ -1,0 +1,492 @@
+CS 515: Assignment 4  Compiling Control Flow
+============================================
+
+
+(1) Overview
+============
+
+Build a compiler for simple C-style procedure bodies. Your compiler
+will accept source files of the form
+
+-----------------
+int x = 6;
+int acc = 1;
+  
+while (x > 0) {
+  acc = acc * x;
+  x = x - 1;
+}
+return acc;
+----------------
+  
+and will produce an executable (by default named a.out) that, when
+linked against runtime.c and then executed, produces the resulting
+output:
+
+$./a.out 
+720
+  
+The code your compiler generates should follow the cdecl calling
+conventions (though, unlike the last assignment, there are no
+command-line inputs). After compilation, the source file from above
+should be functionally equivalent to this C program:
+
+
+int program() {
+  int x = 6;
+  int acc = 1;
+  while (x > 0) {
+    acc = acc * x;
+    x = x - 1;
+  }
+  return acc;
+}
+
+There are three main tasks that you need to accomplish in this
+assignment:
+
+(a) Complete parser.mly for disambiguating if then else statements. The
+stmt token in parser.mly is unimplemented (Details below).
+   -- main task is to figure how to disambiguate if then else grammar
+
+(b) Phase 1: Complete phase1.ml and ctxt.ml . Perform the compilation
+from AST to intermediate code based on LLVM IR called ll (Details
+below and see ll.ml). You should generate valid LLVM IR code.
+   -- Translation between two ASTs should be pretty straightforward.
+   -- Key challenge is maintaining variable contexts and scoping.
+   
+
+(c) Phase 2: Complete phase2.ml. Perform the compilation from LL AST
+to RUX86.
+   -- Translation to RUX86 from LL AST should be straightforward.
+   -- Challenges are in allocating stack space, indexing the
+      appropriate stack space locations.
+  
+(2) Building the assignment
+===========================
+
+You can build the assignment using the following command:
+
+ocamlbuild -libs str -libs unix main.native
+
+Your compiler will produce X86 .s and .o files as well as native
+executables and .out files used during testing. By default these files
+will be generated in directories c_obj and c_bin respectively, and the
+default executable is called a.out. The main compiler accepts new
+command-line flags to change these directories from the
+default. Likewise, the -o option tells the compiler to use the given
+name for the result executable.
+
+Before running the compiler, you should create the c_bin and c_obj
+directories as sub-directories if they are not already present.
+
+
+(3) Running the assignment
+==========================
+
+This assignment needs slightly different build configurations compared
+to the earlier assignments. The main executable also supports more
+command-line flags than our previous assignments. By default main
+looks for runtime.c from the current directory.
+
+When you run on Linux (which you all should do), you should specify
+the -linux flag when running the compiler before the --test flag. This
+turns off name mangling, which has different conventions on Linux and
+Mac OS.
+
+#./main.native --help
+Main test harness 
+
+  --test run the test suite, ignoring other inputs
+  -q quiet mode -- turn off verbose output
+  -bin-path set the output path for generated executable files, default c_bin
+  -obj-path set the output path for generated .s  and .o files, default c_obj
+  -test-path set the path to the test directory
+  -lib add a library to the linked files
+  -runtime set the .c file to be used as the language runtime implementation
+  -o set the output executable's name
+  -S compile only, creating .s files from the source
+  -linux use linux-style name mangling
+  --stdin parse and interpret inputs from the command line, where X = <arg>
+  --clean clean the output directories, removing all files
+  --show-ast print the abstract syntax tree after parsing
+  --show-il print the il representation
+  --llvm-backend use llvm to compile IR
+  -help  Display this list of options
+  --help  Display this list of options
+
+
+(4) Detailed Description of the Assignment
+==========================================
+
+Language
+
+The language accepted by your compiler is a simple variant of C-style
+program statements whose expressions are made up of the 32-bit
+arithmetic operations, which you implemented in Assignment 3.  See the
+file ast.mli for the OCaml representation of the abstract syntax --
+the type exp of expressions is defined there.
+
+
+However, there is no "input variable" X in this assignment. The
+expressions in this assignment can mention user-defined variables,
+represented by values of the form Id varname.
+
+Otherwise, the meaning of the arithmetic operators is identical with
+those in assignment 3.
+
+The new constructs of this language are local variable declarations
+and imperative program statements, with a structure similar to that
+found in C.
+
+The terminal-symbol tokens processed by your lexer are described next.
+
+Lexing
+------
+
+The file lexer.mll already defines all of the tokens you need to
+implement the statement grammar. As before, it depends on an
+implementation of "file ranges" (defined in range.ml(i)) for
+generating error messages. You do not need to modify lexer.mll for
+this assignment. There are several new tokens usable as terminals by
+your parser (see parser.mly for the complete list).
+
+Notable ones include: 
+
+(1) IDENT
+
+program identifiers consisting of characters, digits, and
+underscores 
+
+(2) int, if, else, while, for, and return
+
+language keywords 
+
+(3) ; , { } syntax elements
+
+
+Parsing
+-------
+
+Your parser should accept strings according to the following ambiguous
+grammar, suitably disambiguated to solve the "dangling else"
+problem. In particular, in the statement "if (e1) if (e2) s1 else s2",
+the else s2 clause should be associated with the inner if, not the
+outer one.
+
+The output of your parser should be an abstract syntax
+tree built using the constructors in ast.mli. To get you started, we
+have implemented most of the syntax, leaving only the definition of
+the stmt grammar for you.
+
+
+prog ::= block return exp ;
+
+block ::= vdecls stmts
+
+vdecls ::=
+  | vdecl; vdecls
+  |                              ( nothing )
+
+vdecl ::= typ IDENT = exp
+
+typ ::= int
+ 
+vdecllist ::=
+  | vdeclplus
+  |                              ( nothing )
+
+vdeclplus ::=
+  | vdecl
+  | vdecl, vdeclplus
+ 
+lhs ::= IDENT
+
+stmts ::=
+  | stmt stmts
+  |                              ( nothing )
+
+stmtOPT ::=
+  | stmt
+  |                              ( nothing )
+
+expOPT ::=
+  | exp
+  |                              ( nothing )
+
+exp ::= ...       
+
+stmt ::=                  ( ambiguous! )
+  | lhs = exp;
+  | if (exp) stmt
+  | if (exp) stmt else stmt
+  | while (exp) stmt
+  | for (vdecllist ; expOPT ; stmtOPT) stmt
+  | { block }
+ 
+
+Note that there are two kinds of variable declaration lists -- those
+that are terminated by semicolons and those that are separated by
+commas. The former are used at the start of program blocks, the latter
+are used as part of the for statement. 
+
+For example: 
+
+int x = 3; int y = 4; 
+for (int z = 2, int w = 3; x + y + z > z; x = x - 1; ) y = y -1;
+return y; 
+
+Note also that the for statement has an optional second expression
+that acts as the loop guard -- if it is omitted, then the loop guard
+should be "true".
+
+Unlike C, the third component of a for statement is itself a statement
+(because our language doesn't provide "side-effecting" expressions
+like x++). According to the grammar above, you must include a
+terminating semicolon (as shown in the example) for this statement.
+
+It also allows the (slightly obscure) use of inner blocks like this:
+
+for (int x = 0; x < 10; { int y = 17; x = x + y; }) x = x; return 3;
+
+
+Note: Your implementation should not cause ocamlyacc to generate any
+shift-reduce or reduce-reduce conflicts when processing your
+parser. (Style points will be deducted if this is the case.)
+
+
+Hints
+-----
+
+The switch --show_ast can be used to pretty-print the abstract syntax
+tree to the terminal when the compiler is run.  
+
+
+Compilation: Phase 1
+--------------------
+
+In this assignment, there are two phases in the translation from
+source to X86 code. In Phase 1, you will compile the source abstract
+syntax to a simple control-flow-graph representation based on LLVM
+that uses alloca instructions to create temporary local storage space
+instead of using machine registers or actual stack locations. (Phase
+2, described below, compiles from this intermediate representation to
+X86.)
+
+Files ll.ml and ll.mli define the intermediate language. Local values
+(a.k.a. temporary values) are named by unique identifiers
+(uids). Instructions are separated into "computational" instructions
+insn and "control-flow instructions" terminator. These are grouped
+into labeled basic blocks.
+
+You should complete the implementation of the compile_prog function in
+phase1.ml. This function takes as input a single Ast.prog and produces
+a value of type Ll.prog, which is defined as:
+
+  type prog = {ll_cfg: bblock list; ll_entry: lbl}
+  
+Here, ll_cfg is the control-flow graph (represented as a list of basic
+blocsk), and ll_entry is the label of the starting block for the
+program in the ll representation.
+
+
+
+Variable Scoping
+----------------
+
+A significant part of the work of this translation phase is converting
+the user-defined program variables and any needed temporary locations
+into locals. The mapping from variable identifiers to local uids is
+best handled by a context, which also tracks the scope of variables to
+resolve shadowing (similar to the ones discussed in class).
+
+
+The scoping rules of this language are defined as follows: 
+
+(1) The scope of a variable is the rest of the block in which it is
+introduced. For example, the scope of the variable x in the
+declaration below is e2 and ..., including any nested sub-blocks, but
+not e1.  
+
+int x = e1; int y = e2; ...
+      
+(2) Identifiers declared in inner blocks shadow the definitions of
+outer blocks. In the example below, y will contain the value 3 when
+the program returns:
+
+       int x = 1;
+       int y = 0;
+       {
+          int x = 2;   /* shadow the outer x */
+          y = y + x;
+       }
+       y = y + x;  /* the outer x is still in scope here */
+       return y;   /* y and the outer x are in scope for the returned expression */
+         
+      
+(3) The local variables declared in a for loop are in scope only
+within the loop guard expression, the loop "update" statement, and the
+loop body. The following program is illegal because x is not in scope
+after the for:
+
+      for(int x = 0; x < 10; x = x + 1;) x = x + 2;
+      return x;  /* x is not in scope here */
+      
+In other words, the following two statements are equivalent:
+
+      for(int x = 0; x < 10; x = x + 1;) x = x + 2;
+      
+      {
+        int x = 0;
+        for(; x < 10; x = x + 1;) x = x + 2;
+      }  /* x leaves scope here */
+      
+(4) The expression e occurring in the final return e; of the program is
+in the scope of the variables defined in the preceding block. For
+example this is allowed:
+
+      int x = 0;
+      return x;     /* x is in scope */
+      
+but this is not:
+
+      {
+        int x = 0;
+      }
+      return x;  /* x left scope at the end of the inner block */
+      
+Your compilation functions should take a context as an additional
+parameter to resolve scoping the mapping from names to local
+identifiers (a.k.a. uids). You are free to implement the context using
+whatever datatype you like, though the file ctxt.ml gives you some
+suggestions about how to approach the problem.  
+
+Compiling Control Flow
+----------------------
+
+As with assignment 3, this translation can be thought of as emitting a
+stream of instructions. However, since the results of this translation
+will, in general, include more than one basic block, it is useful to
+think of the emitted stream as including labels, as well as both kinds
+of instructions (arithmetic and control flow).
+
+There are several reasonable strategies for translating the abstract
+syntax into basic blocks: one simple solution is to do a first pass
+emitting a stream of instructions and labels (possible in reverse
+order) and then do a post-processing pass to convert that stream into
+basic blocks (with code in the right order). This is the strategy used
+by our sample implementation, you are free to pursue other approaches
+as you like.
+
+Hints
+-----
+
+(1) Remember that ctxt.ml contains some suggestions about one good way
+to structure your context. You can use this file to implement
+contexts.
+
+
+(2) The List library offers some useful functions for implementing
+contexts. See, for example, List.assoc 
+
+(3) If you do decide to pursue the stream of instructions and labels
+approach suggested above, you might want to make the following
+definitions (or something similar):
+
+type elt =
+  | I of Ll.insn
+  | J of Ll.terminator
+  | L of Ll.lbl
+
+type stream = elt list
+
+
+(4) Your translation strategy should be guided by the structure of the
+abstract syntax. In particular, you should consider implementing a
+compile_X function for each type found in ast.mli -- you'll end up
+with compile_exp, compile_block, compile_var_decl, etc. You might also
+want to consider how the list List.fold_left functions can be applied
+to process lists of abstract syntax elements. The mutual recursion in
+the type definitions can suggest useful ways of structuring mutually
+recursive translation functions.
+
+
+Compilation: Phase 2
+---------------------
+
+For this part of the assignment, you must implement the definition of
+Phase2.compile_prog, which takes a Ll.prog and produces a complete
+Cunit.cunit suitable for assembly on X86.
+
+This translation is largely straight forward, however there is one
+wrinkle: you must allocate storage for the local storage needed for
+the program and translate references to locals into appropriate memory
+operations. Allocation is most easily accomplished in the prologue
+code for the program -- simply allocate enough stack space to
+accommodate the slots. If you follow standard C-style calling
+conventions, you can set Ebp appropriately so that your slots are
+indirect references off of Ebp.
+
+Your translation functions should be parameterized by a mapping from
+uids to stack indices. 
+
+
+The only other wrinkle about this phase of the compiler is that X86
+disallows a single instruction from using two memory operands, so you
+will have to use designated registers to hold the intermediate
+results. One good strategy is to use Eax and Ecx (which is caller
+saved).
+
+Unlike Phase 1, there is no need to use a
+reversed-stream-of-instructions approach: the computation has already
+been flattened such that each Ll instruction will correspond to just a
+couple of X86 instructions. Your translation can simply translate each
+instruction individually and concatenate all of the results. Also,
+each block can be translated independently from the others.
+
+
+
+Hints
+-----
+
+(1) Remember to wrap each X86 block in a Cunit Code component. As with
+assignment 3, there is no need for the Data components yet.
+
+(2) The "prologue" code for your function should reside at the
+(appropriately name mangled) label program.  
+
+(3) Don't forget to emit the appropriate "epilogue" code, which should
+clean up the stack and restore Ebp (if it has been modified) before
+your program returns.
+
+Tests
+=====
+
+We will grade this part of the assignment based on a suite of
+tests. Some of them are available for you to look at in
+gradedtests.ml, the rest of them we reserve for our own cases. 
+
+Assignment submission
+=====================
+
+
+You should submit your directory as assign4.tar.gz.
+
+When we execute the following set of commands on a linux box, your
+submission should execute the tests. If you create the tar file in the
+wrong fashion, it may not have the correct directory structure.
+
+tar -zxvf assign4.tar.gz
+cd assign4
+./ocamlbuild -libs str -libs unix main.native
+./main.native -linux --test
+
+
+Grading
+=======
+ 
+You will get no credit if your submitted program does not compile.
+Apart from the test already given, we will run some hidden
+tests. code). Your score for the given tests will be displayed by the
+test harness.
+
