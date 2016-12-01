@@ -101,6 +101,7 @@ let worklist = ref []
 let suite = ref (Providedtests.provided_tests @ Gradedtests.graded_tests)
 
 let exec_tests () =
+  Platform.configure ();
   let o = run_suite !suite in
   Printf.printf "%s\n" (outcome_to_string o);
   raise Ran_tests
@@ -138,6 +139,7 @@ let _ =
 	   if !Oconfig.compile_only then () 
 	   else
 	     let dot_o_files = List.map (fun p -> root_to_dot_o (path_to_root_source p)) !worklist in
+	       Platform.configure ();
 	       Platform.link dot_o_files !Platform.executable_name
   with Ran_tests -> ()
 
