@@ -45,6 +45,9 @@ open Ast;;
 %type <Ast.block> block
 %type <Ast.typ> typ
 %type <Ast.stmt> stmt
+
+%nonassoc IFPREC
+%nonassoc ELSE
 %%
 
 toplevel:
@@ -143,8 +146,8 @@ E12:
 
 stmt:
     | lhs EQ exp SEMI { Assign(Var(snd($1)), $3) }
-    | IF LPAREN exp RPAREN stmt { If ($3, $5, None) }
+    | IF LPAREN exp RPAREN stmt %prec IFPREC { If ($3, $5, None) }
     | IF LPAREN exp RPAREN stmt ELSE stmt { If ($3, $5, Some $7) }
     | WHILE LPAREN exp RPAREN stmt { While ($3, $5) }
-    | FOR LPAREN vdecllist SEMI exp SEMI stmt RPAREN stmt { For($3, Some $5, Some $7, $9) }
+    | FOR LPAREN vdecllist SEMI expOPT SEMI stmtOPT RPAREN stmt { For($3, $5, $7, $9) }
     | LBRACE block RBRACE { Block ($2) }
