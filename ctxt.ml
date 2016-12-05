@@ -14,8 +14,12 @@ let empty : t = []
 
 (* try to reuse freed, otherwise create new *)
 let alloc (sym : string) (c : t) : (t * Ll.uid) =
-failwith "alloc not implemented"
-
+    let id = Ll.mk_uid sym in
+    let new_ctxt = ((sym, id) :: c) in
+    (new_ctxt, id)
 
 let lookup (sym : string) (c : t) : Ll.uid =
-failwith "lookup not implemented"
+    try
+        List.assoc sym c
+    with Not_found ->
+        raise (Scope_error sym)
