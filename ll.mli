@@ -1,7 +1,7 @@
 (* A simplified subset of the LLVM IR *)
 
 (* Unique identifiers and labels *)
-type uid
+type uid = int * string
 type lbl = Rux86.lbl
 
 val mk_uid  : string -> uid
