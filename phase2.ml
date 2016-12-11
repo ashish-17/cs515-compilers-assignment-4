@@ -29,9 +29,9 @@ let compile_insn (i : Ll.insn) : Rux86.insn list =
             | Add -> movein_insn @ [Rux86.Add(eax, ecx)] @ moveout_insn
             | Sub -> movein_insn @ [Rux86.Sub(eax, ecx)] @ moveout_insn
             | Mul -> movein_insn @ [Rux86.Imul(eax, Ecx)] @ moveout_insn
-            | Shl -> movein_insn @ [Rux86.Shl(eax, ecx)] @ moveout_insn
-            | Lshr -> movein_insn @ [Rux86.Shr(eax, ecx)] @ moveout_insn
-            | Ashr -> movein_insn @ [Rux86.Sar(eax, ecx)] @ moveout_insn
+            | Shl -> movein_insn @ [Rux86.Shl(ecx, eax)] @ moveout_insn
+            | Lshr -> movein_insn @ [Rux86.Shr(ecx, eax)] @ moveout_insn
+            | Ashr -> movein_insn @ [Rux86.Sar(ecx, eax)] @ moveout_insn
             | And -> movein_insn @ [Rux86.And(eax, ecx)] @ moveout_insn
             | Or -> movein_insn @ [Rux86.Or(eax, ecx)] @ moveout_insn
             | Xor -> movein_insn @ [Rux86.Xor(eax, ecx)] @ moveout_insn

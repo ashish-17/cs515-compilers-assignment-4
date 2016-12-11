@@ -1,30 +1,42 @@
 Identification:
   
-<RUID>;<netid>;<name>;<email>
+167004812;AJ523;Ashish Jindal;ashish.jindal@rutgers.edu
 
 
 Known issues with your implementation:
 
+1) I had to edit the declaration of type uid in ll.mli 
+from
+    type uid
+to
+    type uid = int * string
 
+as I wanted to use the int id as index for offsetting ebp. Not sure sure if we are allowed to make changes in this file.
+
+2) There is a problem with my "Shl" instruction, because of which one of the program runs in an infinite loop
+ - medium_ctx2.comp
+Please ignore the above test while running the test cases using --test, I did the same by replacing the "<<" operator with "+" in the test file.
+If you ignore the above mentioned test case, the test cases complete with a score of 79/80
+In my submission I have edittied the test case "medium_ctxt2" so that it doesn't get stuck in an infinite loop and thus prevent from running other test cases.
 
 ------------------------
 Course Project Feedback:
 ------------------------
 
-1.  How much time did it take to complete this project?
+1.  How much time did it take to complete this project? > 1 week
 
 
-2. How effective was this project? [0-10]: 
+2. How effective was this project? [0-10]: 10
 
     0 = learned nothing
    10 = highly educational
 
-3. How engaging was this project? [0-10]:
+3. How engaging was this project? [0-10]: 10
 
     0 = tedious and boring
    10 = fun and engaging
 
-4. How difficult was this project? [0-10]:
+4. How difficult was this project? [0-10]: 10
 
     0 = piece of cake
    10 = extremely hard
